@@ -1,0 +1,198 @@
+# Documentation de passation - NeoTravel
+
+## 1) Objectif de l'application
+
+NeoTravel est une application web Next.js pour la gestion de demandes de transport de groupe.
+
+Le projet couvre trois usages principaux:
+- Presentation commerciale (page d'accueil).
+- Qualification d'un besoin via conversation (page chat).
+- Calcul de devis, generation PDF et enregistrement CRM (Airtable).
+
+## 2) Stack technique
+
+- Framework: Next.js (App Router), React, TypeScript.
+- UI: CSS global + CSS inline dans certaines pages + icones lucide-react.
+- Generation PDF: jspdf.
+- Persistance/metier: Airtable (API REST).
+- Outils: ESLint, Tailwind CSS v4 (import via app/globals.css).
+
+Scripts npm disponibles:
+- npm run dev: demarrage local.
+- npm run build: build production.
+- npm run start: lancement production.
+- npm run lint: analyse lint.
+
+## 3) Arborescence utile
+
+- app/page.tsx: landing page marketing.
+- app/chat/page.tsx: parcours conversationnel principal (assistant simule).
+- app/devis/page.tsx: formulaire metier, calcul, enregistrement Airtable, PDF.
+- app/components/Chatbot.tsx: widget flottant global branche sur webhook n8n.
+- app/api/demandes/route.ts: creation d'une demande.
+- app/api/devis/route.ts: creation d'un devis.
+- app/api/relances/route.ts: creation d'une relance.
+- app/api/tarification/calculate/route.ts: moteur de calcul tarifaire.
+- app/lib/devis-types.ts: types partages pour la tarification.
+- scripts/setup-airtable-schema.ps1: initialisation schema Airtable + seed Tarification.
+
+## 4) Variables d'environnement
+
+Variables requises dans .env.local:
+- AIRTABLE_API_KEY
+- AIRTABLE_BASE_ID
+- AIRTABLE_DEMANDES_TABLE_NAME (optionnel, defaut: Demandes)
+- AIRTABLE_DEVIS_TABLE_NAME (optionnel, defaut: Devis)
+- AIRTABLE_RELANCES_TABLE_NAME (optionnel, defaut: Relances)
+- AIRTABLE_TARIFICATION_TABLE_NAME (optionnel, defaut: Tarification)
+
+Important securite:
+- Ne jamais commiter la vraie AIRTABLE_API_KEY.
+- Regenerer la cle si elle a ete exposee.
+
+## 5) Flux fonctionnels
+
+### 5.1 Landing
+
+La page d'accueil presente l'offre NeoTravel, les profils clients, la flotte et redirige vers /chat.
+
+### 5.2 Parcours chat principal (/chat)
+
+Le parcours pose 6 questions (besoin, depart, destination, date, passagers, specificites).
+
+Etat actuel:
+- Le moteur est simule localement (pas de webhook actif).
+- La constante N8N_WEBHOOK_URL est vide et la partie reelle est commentee.
+
+### 5.3 Widget Chatbot global
+
+Le composant Chatbot est injecte dans le layout global, donc visible sur toutes les pages.
+
+Fonctionnement:
+- Envoi du message vers un webhook n8n (URL hardcodee dans le composant).
+- Parsing de la reponse brute ou NDJSON streaming.
+
+### 5.4 Creation demande + devis + relances (/devis)
+
+Le formulaire /devis execute ce sequence:
+1. Appel POST /api/tarification/calculate pour obtenir le detail du calcul.
+2. Appel POST /api/demandes pour enregistrer la demande dans Airtable.
+3. Option bouton PDF: regeneration du calcul, creation PDF, puis POST /api/devis.
+4. Option relance: POST /api/relances rattache au devis selectionne.
+
+## 6) API interne (routes Next)
+
+### POST /api/tarification/calculate
+
+Entree:
+- prixBase, distanceKm, dateDepart, codeDateDemande, nombrePassagers,
+- nombreJoursGuide, nombreNuitsChauffeur, forfaitPeages.
+
+Traitement:
+- Lecture des regles Airtable (table Tarification).
+- Selection coefficient saisonnalite selon mois de dateDepart.
+- Selection coefficient date de demande selon code DD_*.
+- Selection coefficient capacite selon bornes passagers.
+- Selection prix base par grille km (ForfaitKm) ou formule depassement.
+- Application supplements, marge et TVA.
+
+Sortie:
+- detail complet: prixBase, coefficients, sous-totaux HT, TVA, prixFinalTtc.
+
+### POST /api/demandes
+
+Validation minimale:
+- nomSociete, email, telephone obligatoires.
+
+Insertion Airtable table Demandes avec toutes les informations du formulaire client.
+
+### POST /api/devis
+
+Validation:
+- prixHt, tva10, prixTtc doivent etre numeriques.
+
+Insertion Airtable table Devis avec detailCalcul (JSON string), statut, dates et metadonnees PDF.
+
+### POST /api/relances
+
+Validation:
+- devisLie obligatoire.
+- numeroRelance numerique > 0.
+
+Insertion Airtable table Relances avec date planifiee, statut et reponse prospect.
+
+## 7) Moteur de tarification (logique metier)
+
+Formule appliquee:
+- totalCoefficients = coeffSaisonnalite + coeffDateDemande + coeffCapacite
+- montantAjuste = prixBaseTarif * (1 + totalCoefficients)
+- supplements = (joursGuide * tarifGuide) + (nuitsChauffeur * tarifNuit) + forfaitPeages
+- sousTotalHt = montantAjuste + supplements
+- margeCommerciale = sousTotalHt * tauxMarge
+- totalApresMargeHt = sousTotalHt + margeCommerciale
+- tva = totalApresMargeHt * tauxTva
+- prixFinalTtc = totalApresMargeHt + tva
+
+Les arrondis sont appliques a 2 decimales pour les montants retournes.
+
+## 8) Schema Airtable attendu
+
+Tables:
+- Demandes
+- Devis
+- Relances
+- Tarification
+
+Le script scripts/setup-airtable-schema.ps1:
+- cree les tables si absentes,
+- garantit les champs necessaires,
+- injecte un seed de regles tarifaires et grille km.
+
+## 9) Procedure de reprise (handover)
+
+### 9.1 Installation
+
+1. npm install
+2. renseigner .env.local
+3. npm run dev
+4. ouvrir http://localhost:3000
+
+### 9.2 Initialisation Airtable
+
+Depuis le dossier racine neotravel-app:
+- powershell -ExecutionPolicy Bypass -File .\scripts\setup-airtable-schema.ps1
+
+### 9.3 Verification rapide
+
+1. Page accueil charge et navigation vers /chat.
+2. /devis calcule un prix via /api/tarification/calculate.
+3. Enregistrement demande OK dans Airtable.
+4. Telechargement PDF OK et creation devis Airtable.
+5. Creation relance OK.
+
+## 10) Points de vigilance
+
+- Le metadata de layout est encore celui du template Next (titre/description generiques).
+- Deux experiences chat coexistent:
+	- /chat: simulateur local.
+	- widget global: webhook n8n hardcode.
+- Le lien entre Devis et Relances n'est pas modele en linked record Airtable natif dans le script actuel (champ texte), alors que la route relances envoie un tableau pour devisLie.
+- Le calcul peut renvoyer des valeurs par defaut si certaines regles Tarification manquent.
+
+## 11) Recommandations prioritaires apres passation
+
+1. Unifier la strategie chat (source unique: n8n ou simulation).
+2. Externaliser toute URL sensible en variable d'environnement (webhook inclus).
+3. Harmoniser le type du champ devisLie (texte vs linked record) entre script et API.
+4. Mettre a jour les metadata SEO et le README projet.
+5. Ajouter des tests (au minimum sur /api/tarification/calculate).
+
+## 12) Contact technique et maintien
+
+Pour toute evolution, prioriser:
+- stabilite des calculs,
+- coherence du schema Airtable,
+- securite des secrets,
+- traçabilite des flux demande -> devis -> relance.
+
+Ce document est la base de reprise; il doit etre mis a jour a chaque changement de logique metier ou de schema Airtable.
