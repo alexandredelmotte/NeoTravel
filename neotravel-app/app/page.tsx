@@ -17,6 +17,7 @@ export default function Accueil() {
         <nav className="nh-nav">
           <a href="#comment">Comment ça marche</a>
           <a href="#pourqui">Pour qui</a>
+          <a href="/devis">Devis</a>
           <Link href="/chat" className="nh-nav-cta">Demander un devis</Link>
         </nav>
       </header>
