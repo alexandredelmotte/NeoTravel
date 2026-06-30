@@ -21,7 +21,6 @@ export async function POST(request: Request) {
     }
 
     if (!to || !subject || !html) {
-<<<<<<< Updated upstream
       return NextResponse.json(
         { success: false, error: "Champs manquants (to, subject, html)" },
         { status: 400 }
@@ -53,40 +52,23 @@ export async function POST(request: Request) {
     }
 
     // --- Connexion SMTP Gmail ---
-=======
-      return NextResponse.json({ success: false, error: "Champs manquants (to, subject, html)" }, { status: 400 });
-    }
-
-    // Connexion au serveur d'envoi de Gmail (SMTP)
->>>>>>> Stashed changes
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
       secure: true,
       auth: {
-<<<<<<< Updated upstream
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_APP_PASSWORD,
       },
     });
 
     // --- Envoi du mail (avec ou sans PDF) ---
-=======
-        user: process.env.GMAIL_USER,         // lu depuis .env.local
-        pass: process.env.GMAIL_APP_PASSWORD, // jamais en dur dans le code
-      },
-    });
-
->>>>>>> Stashed changes
     await transporter.sendMail({
       from: `"NeoTravel" <${process.env.GMAIL_USER}>`,
       to,
       subject,
       html,
-<<<<<<< Updated upstream
       attachments, // ← vide si pas de PDF, rempli si PDF généré
-=======
->>>>>>> Stashed changes
     });
 
     return NextResponse.json({ success: true });

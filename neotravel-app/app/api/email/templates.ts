@@ -1,7 +1,3 @@
-<<<<<<< Updated upstream
-=======
-// Les infos qui remplissent le mail. Elles viendront de la demande du client.
->>>>>>> Stashed changes
 export type DonneesMail = {
   nom: string;           // ex : "Marie Dupont"
   depart: string;        // ex : "Paris"
