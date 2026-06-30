@@ -150,52 +150,137 @@ export default function DevisPage() {
     input: ReturnType<typeof getInputFromForm>,
   ) {
     const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF();
-    let y = 16;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    const contentWidth = pageWidth - margin * 2;
+    let y = 18;
 
-    const addLine = (label: string, value: string) => {
-      doc.text(`${label}: ${value}`, 14, y);
-      y += 8;
+    const formatCurrency = (value: number) => `${value.toFixed(2)} EUR`;
+    const formatPercent = (value: number) => `${(value * 100).toFixed(0)}%`;
+
+    const drawHeader = () => {
+      doc.setFillColor(17, 24, 39);
+      doc.roundedRect(margin, y - 8, contentWidth, 24, 2, 2, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.text("DEVIS NEOTRAVEL", margin + 6, y + 1);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Date: ${TODAY}`, margin + 6, y + 8);
+
+      y += 24;
     };
 
-    doc.setFontSize(16);
-    doc.text("Devis NeoTravel", 14, y);
-    y += 10;
+    const drawSectionTitle = (title: string) => {
+      y += 6;
+      doc.setTextColor(17, 24, 39);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(title, margin, y);
+      y += 2;
 
-    doc.setFontSize(11);
-    addLine("Date depart", String(input.dateDepart));
-    addLine("Code date demande", input.codeDateDemande);
-    addLine("Nombre passagers", String(input.nombrePassagers));
-    addLine("Prix base", `${detail.prixBase.toFixed(2)} EUR`);
-    addLine(
-      "Coeff saisonnalite",
-      `${(detail.coefficientSaisonnalite * 100).toFixed(0)}%`,
-    );
-    addLine(
-      "Coeff date demande",
-      `${(detail.coefficientDateDemande * 100).toFixed(0)}%`,
-    );
-    addLine(
-      "Coeff capacite",
-      `${(detail.coefficientCapacite * 100).toFixed(0)}%`,
-    );
-    addLine(
-      "Total coefficients",
-      `${(detail.totalCoefficients * 100).toFixed(0)}%`,
-    );
-    addLine("Montant ajuste", `${detail.montantAjuste.toFixed(2)} EUR`);
-    addLine("Supplements", `${detail.supplements.toFixed(2)} EUR`);
-    addLine("Sous-total HT", `${detail.sousTotalHt.toFixed(2)} EUR`);
-    addLine("Marge commerciale", `${detail.margeCommerciale.toFixed(2)} EUR`);
-    addLine(
-      "Total apres marge HT",
-      `${detail.totalApresMargeHt.toFixed(2)} EUR`,
-    );
-    addLine("TVA", `${detail.tva.toFixed(2)} EUR`);
+      doc.setDrawColor(209, 213, 219);
+      doc.setLineWidth(0.4);
+      doc.line(margin, y + 1, margin + contentWidth, y + 1);
+      y += 6;
+    };
+
+    const drawInfoGrid = (rows: Array<[string, string]>) => {
+      const rowHeight = 8;
+      const colGap = 4;
+      const colWidth = (contentWidth - colGap) / 2;
+
+      for (let i = 0; i < rows.length; i += 2) {
+        const left = rows[i];
+        const right = rows[i + 1];
+
+        doc.setFillColor(249, 250, 251);
+        doc.roundedRect(margin, y - 5.5, colWidth, rowHeight, 1.5, 1.5, "F");
+        doc.setTextColor(55, 65, 81);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.text(left[0], margin + 2, y - 0.4);
+        doc.setFont("helvetica", "normal");
+        doc.text(left[1], margin + colWidth - 2, y - 0.4, { align: "right" });
+
+        if (right) {
+          const rightX = margin + colWidth + colGap;
+          doc.setFillColor(249, 250, 251);
+          doc.roundedRect(rightX, y - 5.5, colWidth, rowHeight, 1.5, 1.5, "F");
+          doc.setFont("helvetica", "bold");
+          doc.text(right[0], rightX + 2, y - 0.4);
+          doc.setFont("helvetica", "normal");
+          doc.text(right[1], rightX + colWidth - 2, y - 0.4, { align: "right" });
+        }
+
+        y += rowHeight + 1.2;
+      }
+    };
+
+    const drawFinanceTable = (rows: Array<[string, string]>) => {
+      const rowHeight = 7.5;
+      const labelX = margin + 3;
+      const valueX = margin + contentWidth - 3;
+
+      rows.forEach(([label, value], index) => {
+        if (index % 2 === 0) {
+          doc.setFillColor(249, 250, 251);
+          doc.rect(margin, y - 5.5, contentWidth, rowHeight, "F");
+        }
+
+        doc.setTextColor(31, 41, 55);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.text(label, labelX, y - 0.4);
+        doc.text(value, valueX, y - 0.4, { align: "right" });
+
+        y += rowHeight;
+      });
+    };
+
+    drawHeader();
+
+    drawSectionTitle("Informations de trajet");
+    drawInfoGrid([
+      ["Date depart", String(input.dateDepart)],
+      ["Code date demande", input.codeDateDemande],
+      ["Nombre passagers", String(input.nombrePassagers)],
+      ["Distance", `${Number(input.distanceKm ?? 0).toFixed(1)} km`],
+    ]);
+
+    drawSectionTitle("Coefficients de tarification");
+    drawInfoGrid([
+      ["Saisonnalite", formatPercent(detail.coefficientSaisonnalite)],
+      ["Date demande", formatPercent(detail.coefficientDateDemande)],
+      ["Capacite", formatPercent(detail.coefficientCapacite)],
+      ["Total coeff.", formatPercent(detail.totalCoefficients)],
+    ]);
+
+    drawSectionTitle("Detail financier");
+    drawFinanceTable([
+      ["Prix base", formatCurrency(detail.prixBase)],
+      ["Montant ajuste", formatCurrency(detail.montantAjuste)],
+      ["Supplements", formatCurrency(detail.supplements)],
+      ["Sous-total HT", formatCurrency(detail.sousTotalHt)],
+      ["Marge commerciale", formatCurrency(detail.margeCommerciale)],
+      ["Total apres marge HT", formatCurrency(detail.totalApresMargeHt)],
+      ["TVA (10%)", formatCurrency(detail.tva)],
+    ]);
 
     y += 4;
-    doc.setFontSize(14);
-    doc.text(`PRIX FINAL TTC: ${detail.prixFinalTtc.toFixed(2)} EUR`, 14, y);
+    doc.setFillColor(5, 150, 105);
+    doc.roundedRect(margin, y - 4.5, contentWidth, 13, 2, 2, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text("PRIX FINAL TTC", margin + 4, y + 3.2);
+    doc.text(formatCurrency(detail.prixFinalTtc), margin + contentWidth - 4, y + 3.2, {
+      align: "right",
+    });
 
     const safeDate = String(input.dateDepart).replaceAll("/", "-");
     const pdfFileName = `devis-${safeDate}.pdf`;
@@ -738,150 +823,7 @@ export default function DevisPage() {
           </section>
         )}
 
-        {devisRows.length > 0 && (
-          <section className="mt-6 rounded-xl border border-zinc-200 p-4">
-            <h2 className="text-lg font-semibold">Table des devis (telechargeables)</h2>
-            <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-200 text-left">
-                    <th className="px-2 py-2">ID devis</th>
-                    <th className="px-2 py-2">Demande liee</th>
-                    <th className="px-2 py-2">Prix HT</th>
-                    <th className="px-2 py-2">TVA (10%)</th>
-                    <th className="px-2 py-2">Prix TTC</th>
-                    <th className="px-2 py-2">Detail calcul</th>
-                    <th className="px-2 py-2">PDF</th>
-                    <th className="px-2 py-2">Statut</th>
-                    <th className="px-2 py-2">Date envoi</th>
-                    <th className="px-2 py-2">Prochaine relance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {devisRows.map((row) => (
-                    <tr key={row.idDevis} className="border-b border-zinc-100 align-top">
-                      <td className="px-2 py-2">{row.idDevis}</td>
-                      <td className="px-2 py-2">{row.demandeLiee || "-"}</td>
-                      <td className="px-2 py-2">{row.prixHt.toFixed(2)} EUR</td>
-                      <td className="px-2 py-2">{row.tva.toFixed(2)} EUR</td>
-                      <td className="px-2 py-2">{row.prixTtc.toFixed(2)} EUR</td>
-                      <td className="max-w-56 truncate px-2 py-2" title={row.detailCalcul}>
-                        {row.detailCalcul}
-                      </td>
-                      <td className="px-2 py-2">
-                        <button
-                          type="button"
-                          onClick={() => downloadBlobPdf(row.pdfUrl, row.pdfFileName)}
-                          className="rounded bg-emerald-700 px-2 py-1 text-white hover:bg-emerald-600"
-                        >
-                          Telecharger
-                        </button>
-                      </td>
-                      <td className="px-2 py-2">{row.statut}</td>
-                      <td className="px-2 py-2">{row.dateEnvoi}</td>
-                      <td className="px-2 py-2">{row.prochaineRelance}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        <section className="mt-6 rounded-xl border border-zinc-200 p-4">
-          <h2 className="text-lg font-semibold">Table des relances</h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-sm font-medium">Devis lie</span>
-              <select
-                value={relanceDevisLie}
-                onChange={(e) => setRelanceDevisLie(e.target.value)}
-                className="rounded-lg border border-zinc-300 px-3 py-2"
-              >
-                <option value="">Selectionner un devis</option>
-                {devisRows.map((row) => (
-                  <option key={row.idDevis} value={row.idDevis}>
-                    {row.idDevis}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="grid gap-1">
-              <span className="text-sm font-medium">Date planifiee</span>
-              <input
-                type="date"
-                value={relanceDatePlanifiee}
-                onChange={(e) => setRelanceDatePlanifiee(e.target.value)}
-                className="rounded-lg border border-zinc-300 px-3 py-2"
-              />
-            </label>
-
-            <label className="grid gap-1">
-              <span className="text-sm font-medium">Statut</span>
-              <select
-                value={relanceStatut}
-                onChange={(e) => setRelanceStatut(e.target.value)}
-                className="rounded-lg border border-zinc-300 px-3 py-2"
-              >
-                <option value="A planifier">A planifier</option>
-                <option value="Planifiee">Planifiee</option>
-                <option value="Envoyee">Envoyee</option>
-                <option value="Repondu">Repondu</option>
-                <option value="Sans reponse">Sans reponse</option>
-              </select>
-            </label>
-
-            <label className="grid gap-1 sm:col-span-2">
-              <span className="text-sm font-medium">Reponse prospect</span>
-              <textarea
-                value={relanceReponseProspect}
-                onChange={(e) => setRelanceReponseProspect(e.target.value)}
-                className="min-h-20 rounded-lg border border-zinc-300 px-3 py-2"
-                placeholder="Compte-rendu de l'appel ou de l'email..."
-              />
-            </label>
-
-            <div className="sm:col-span-2">
-              <button
-                type="button"
-                onClick={onCreateRelance}
-                className="rounded-lg bg-blue-700 px-4 py-2 text-white transition hover:bg-blue-600"
-              >
-                Ajouter une relance
-              </button>
-            </div>
-          </div>
-
-          {relancesRows.length > 0 && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-200 text-left">
-                    <th className="px-2 py-2">Devis lie</th>
-                    <th className="px-2 py-2">Numero relance</th>
-                    <th className="px-2 py-2">Date planifiee</th>
-                    <th className="px-2 py-2">Statut</th>
-                    <th className="px-2 py-2">Reponse prospect</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {relancesRows.map((row) => (
-                    <tr key={row.idRelance} className="border-b border-zinc-100 align-top">
-                      <td className="px-2 py-2">{row.devisLie}</td>
-                      <td className="px-2 py-2">{row.numeroRelance}</td>
-                      <td className="px-2 py-2">{row.datePlanifiee}</td>
-                      <td className="px-2 py-2">{row.statut}</td>
-                      <td className="max-w-72 truncate px-2 py-2" title={row.reponseProspect}>
-                        {row.reponseProspect || "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+        
       </div>
     </main>
   );
