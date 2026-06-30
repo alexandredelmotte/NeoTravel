@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import type { CalculDevisDetail, CalculerDevisInput } from "../devis";
+import type { CalculDevisDetail, CalculerDevisInput } from "../lib/devis-types";
 
 type CodeDateDemande =
   | "DD_PRIORITAIRE"
@@ -96,6 +96,7 @@ export default function DevisPage() {
   function getInputFromForm(): CalculerDevisInput {
     return {
       prixBase: Number(form.prixBase),
+      distanceKm: Number(form.distanceKm),
       dateDepart: form.dateDepart,
       codeDateDemande: form.codeDateDemande,
       nombrePassagers: Number(form.nombrePassagers),
@@ -509,19 +510,6 @@ export default function DevisPage() {
               step="0.1"
               value={form.distanceKm}
               onChange={(e) => updateField("distanceKm", e.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2"
-              required
-            />
-          </label>
-
-          <label className="grid gap-1 sm:col-span-1">
-            <span className="text-sm font-medium">Prix de base (€)</span>
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.prixBase}
-              onChange={(e) => updateField("prixBase", e.target.value)}
               className="rounded-lg border border-zinc-300 px-3 py-2"
               required
             />

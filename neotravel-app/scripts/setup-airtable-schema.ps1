@@ -40,10 +40,20 @@ function Ensure-Field($tableId, $name, $type, $options) {
 
 function Ensure-TarificationSeed($tableName) {
   $endpoint = "https://api.airtable.com/v0/$baseId/$([uri]::EscapeDataString($tableName))"
-  $existing = Invoke-RestMethod -Uri ($endpoint + "?maxRecords=1") -Headers @{ Authorization = "Bearer $apiKey" } -Method Get
-  if ($existing.records.Count -gt 0) { return }
+  $existing = Invoke-RestMethod -Uri ($endpoint + "?maxRecords=100") -Headers @{ Authorization = "Bearer $apiKey" } -Method Get
 
-  $rows = @(
+  $hasBaseRules = $false
+  $hasKmGrid = $false
+  foreach ($record in $existing.records) {
+    $type = [string]$record.fields."Type coefficient"
+    if ($type -eq 'Saisonnalite') { $hasBaseRules = $true }
+    if ($type -eq 'ForfaitKm') { $hasKmGrid = $true }
+  }
+
+  $rows = @()
+
+  if (-not $hasBaseRules) {
+    $rows += @(
     @{ "Type coefficient"='Saisonnalite'; Nom='Basse saison'; Valeur='-7%'; Condition='Novembre, Janvier, Fevrier, Aout' },
     @{ "Type coefficient"='Saisonnalite'; Nom='Moyenne saison'; Valeur='0%'; Condition='Decembre, Octobre, Septembre' },
     @{ "Type coefficient"='Saisonnalite'; Nom='Haute saison'; Valeur='+10%'; Condition='Mars, Avril, Juillet' },
@@ -61,7 +71,34 @@ function Ensure-TarificationSeed($tableName) {
     @{ "Type coefficient"='Supplement'; Nom='Nuit chauffeur'; Valeur='120'; Condition='par nuit' },
     @{ "Type coefficient"='Fiscalite'; Nom='TVA'; Valeur='10%'; Condition='global' },
     @{ "Type coefficient"='Fiscalite'; Nom='Marge commerciale'; Valeur='15%'; Condition='global' }
-  )
+    )
+  }
+
+  if (-not $hasKmGrid) {
+    $rows += @(
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 10 km'; Valeur='250'; Condition='<= 10'; km=10 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 20 km'; Valeur='250'; Condition='<= 20'; km=20 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 30 km'; Valeur='250'; Condition='<= 30'; km=30 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 40 km'; Valeur='320'; Condition='<= 40'; km=40 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 50 km'; Valeur='350'; Condition='<= 50'; km=50 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 60 km'; Valeur='390'; Condition='<= 60'; km=60 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 70 km'; Valeur='430'; Condition='<= 70'; km=70 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 80 km'; Valeur='500'; Condition='<= 80'; km=80 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 90 km'; Valeur='540'; Condition='<= 90'; km=90 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 100 km'; Valeur='580'; Condition='<= 100'; km=100 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 110 km'; Valeur='620'; Condition='<= 110'; km=110 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 120 km'; Valeur='660'; Condition='<= 120'; km=120 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 130 km'; Valeur='700'; Condition='<= 130'; km=130 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 140 km'; Valeur='740'; Condition='<= 140'; km=140 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 150 km'; Valeur='780'; Condition='<= 150'; km=150 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 160 km'; Valeur='820'; Condition='<= 160'; km=160 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 170 km'; Valeur='860'; Condition='<= 170'; km=170 },
+      @{ "Type coefficient"='ForfaitKm'; Nom='Jusqu a 180 km'; Valeur='900'; Condition='<= 180'; km=180 },
+      @{ "Type coefficient"='ForfaitKmDepassement'; Nom='Au dela de 180 km'; Valeur='2.5'; Condition='(KM x 2) x 2,5 EUR / km parcourue'; km=181 }
+    )
+  }
+
+  if ($rows.Count -eq 0) { return }
 
   $records = @()
   foreach ($row in $rows) {
@@ -116,7 +153,8 @@ $tarificationFields = @(
   @{ name='Type coefficient'; type='singleLineText' },
   @{ name='Nom'; type='singleLineText' },
   @{ name='Valeur'; type='singleLineText' },
-  @{ name='Condition'; type='singleLineText' }
+  @{ name='Condition'; type='singleLineText' },
+  @{ name='km'; type='number'; options=@{ precision=0 } }
 )
 
 $demandesId = Ensure-Table 'Demandes' $demandesFields
@@ -162,6 +200,7 @@ Ensure-Field $tarificationId 'Type coefficient' 'singleLineText' $null
 Ensure-Field $tarificationId 'Nom' 'singleLineText' $null
 Ensure-Field $tarificationId 'Valeur' 'singleLineText' $null
 Ensure-Field $tarificationId 'Condition' 'singleLineText' $null
+Ensure-Field $tarificationId 'km' 'number' @{ precision=0 }
 
 Ensure-TarificationSeed 'Tarification'
 

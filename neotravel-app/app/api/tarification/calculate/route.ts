@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import type { CalculDevisDetail, CalculerDevisInput } from "@/app/devis";
+import type { CalculDevisDetail, CalculerDevisInput } from "@/app/lib/devis-types";
 
 interface TarificationRow {
   typeCoefficient: string;
   nom: string;
   valeur: string;
   condition: string;
+  km: number | null;
 }
 
 function arrondir2(valeur: number): number {
@@ -117,6 +118,41 @@ function findRateValue(rules: TarificationRow[], keyword: string): number {
   return row ? parseValeur(row.valeur) : 0;
 }
 
+function parseKm(condition: string, nom: string): number | null {
+  const raw = `${condition} ${nom}`;
+  const match = raw.match(/\d+(?:[.,]\d+)?/);
+  if (!match) return null;
+  const value = Number(match[0].replace(",", "."));
+  return Number.isFinite(value) ? value : null;
+}
+
+function findPrixBaseByKm(rules: TarificationRow[], distanceKm: number, fallback: number): number {
+  const kmRules = rules
+    .filter((rule) => normalize(rule.typeCoefficient).includes("forfaitkm"))
+    .map((rule) => {
+      const km = rule.km ?? parseKm(rule.condition, rule.nom);
+      return { ...rule, parsedKm: km };
+    })
+    .filter((rule) => rule.parsedKm !== null)
+    .sort((a, b) => Number(a.parsedKm) - Number(b.parsedKm));
+
+  if (distanceKm <= 0 || kmRules.length === 0) return fallback;
+
+  const maxKm = Number(kmRules[kmRules.length - 1].parsedKm);
+  if (distanceKm <= maxKm) {
+    const band = kmRules.find((rule) => distanceKm <= Number(rule.parsedKm));
+    return band ? parseValeur(band.valeur) : fallback;
+  }
+
+  const depassement = rules.find(
+    (rule) => normalize(rule.typeCoefficient).includes("forfaitkmdepassement"),
+  );
+  const prixParKm = depassement ? parseValeur(depassement.valeur) : 2.5;
+
+  // Regle fournie: au-dela de 180km => (KM x 2) x 2,5 EUR
+  return distanceKm * 2 * prixParKm;
+}
+
 async function fetchTarificationRules(
   apiKey: string,
   baseId: string,
@@ -147,6 +183,12 @@ async function fetchTarificationRules(
       nom: String(fields.Nom ?? fields.nom ?? ""),
       valeur: String(fields.Valeur ?? fields.valeur ?? ""),
       condition: String(fields.Condition ?? fields.condition ?? ""),
+      km:
+        typeof fields.km === "number"
+          ? fields.km
+          : typeof fields.KM === "number"
+            ? fields.KM
+            : null,
     };
   });
 }
@@ -180,7 +222,13 @@ export async function POST(request: Request) {
     const totalCoefficients =
       coefficientSaisonnalite + coefficientDateDemande + coefficientCapacite;
 
-    const montantAjuste = input.prixBase * (1 + totalCoefficients);
+    const prixBaseTarif = findPrixBaseByKm(
+      rules,
+      input.distanceKm ?? 0,
+      input.prixBase,
+    );
+
+    const montantAjuste = prixBaseTarif * (1 + totalCoefficients);
 
     const tarifGuideParJour = findSupplementValue(rules, "guide");
     const tarifNuitChauffeur = findSupplementValue(rules, "nuit chauffeur");
@@ -199,7 +247,7 @@ export async function POST(request: Request) {
     const prixFinalTtc = totalApresMargeHt + tva;
 
     const detail: CalculDevisDetail = {
-      prixBase: arrondir2(input.prixBase),
+      prixBase: arrondir2(prixBaseTarif),
       coefficientSaisonnalite,
       coefficientDateDemande,
       coefficientCapacite,
